@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>PreviewChat サンプル</title>
+<style>
+  @page { size: A4; margin: 25mm; }
+  body { font-family: "Hiragino Sans", "Helvetica Neue", sans-serif; color: #222; line-height: 1.7; font-size: 11pt; }
+  h1 { font-size: 24pt; margin-bottom: 4pt; border-bottom: 3px solid #4a90e2; padding-bottom: 6pt; }
+  .subtitle { color: #888; font-size: 10pt; margin-bottom: 28pt; }
+  h2 { font-size: 14pt; color: #2a4d7a; margin-top: 22pt; margin-bottom: 8pt; }
+  h3 { font-size: 11.5pt; color: #2a4d7a; margin-top: 14pt; }
+  p { margin: 6pt 0; }
+  ul { margin: 4pt 0 8pt 18pt; }
+  li { margin-bottom: 3pt; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-family: "Menlo", monospace; font-size: 10pt; }
+  .note { background: #f7f9fc; border-left: 3px solid #4a90e2; padding: 8pt 12pt; margin: 10pt 0; font-size: 10pt; color: #555; }
+  table { border-collapse: collapse; margin: 8pt 0; font-size: 10pt; }
+  th, td { border: 1px solid #ccc; padding: 5pt 10pt; text-align: left; }
+  th { background: #eef3f8; }
+</style>
+</head>
+<body>
+
+<h1>PreviewChat サンプル文書</h1>
+<div class="subtitle">v0.1 — このPDFはアプリの動作確認用に用意したオリジナル文書です</div>
+
+<h2>1. このアプリについて</h2>
+<p>PreviewChatは、macOS上でPDFや画像、Markdownを閲覧しながら、その内容についてAIエージェントと対話できる軽量ビューワです。左側にファイルが表示され、右側のサイドバーに会話エリアがあります。</p>
+<p>狙いは「ファイルを開いたまま、その文書について質問する」という普段の読み方を、AIに自然に手伝ってもらうことです。論文・契約書・スライド・コードドキュメント・操作マニュアルなど、長文を読むときの最初の整理に向いています。</p>
+
+<h2>2. 主な機能</h2>
+<ul>
+  <li><strong>ネイティブビューワ</strong>: PDFKitベースで、トラックパッドのピンチ操作で拡大縮小、テキスト選択から翻訳・辞書が呼び出せる。</li>
+  <li><strong>ファイル別チャット履歴</strong>: 同じファイルを再度開けば、前回の会話の続きから話せる。</li>
+  <li><strong>モデル切替</strong>: 速い応答が欲しいときはHaiku、深い読解にはOpus、と用途で選び分けられる。</li>
+  <li><strong>エージェント機能</strong>: 同じフォルダ内の別ファイルを参照したり、要約をMarkdownファイルとして書き出したりできる。</li>
+</ul>
+
+<h2>3. 使い方のシナリオ例</h2>
+
+<h3>シナリオA: 論文を読むとき</h3>
+<p>PDFを開いて「この論文の貢献を3点に整理して」と質問する。続けて「関連研究の節で言及されている手法と比較して」と聞けば、Claudeが該当箇所を参照しながら答える。</p>
+
+<h3>シナリオB: マニュアルから抜粋</h3>
+<p>長いマニュアルPDFを開き、「ショートカットキーの一覧だけ抜き出してMarkdownで保存して」と頼むと、同じフォルダに新しい <code>shortcuts.md</code> が作られる。</p>
+
+<h2>4. ショートカット</h2>
+<table>
+  <tr><th>操作</th><th>キー</th></tr>
+  <tr><td>新規ファイルを開く</td><td>⌘O</td></tr>
+  <tr><td>メッセージを送信</td><td>Enter</td></tr>
+  <tr><td>改行を入れる</td><td>Shift + Enter</td></tr>
+  <tr><td>検索バーを開く（PDF/テキスト）</td><td>⌘F</td></tr>
+  <tr><td>拡大 / 縮小</td><td>トラックパッドのピンチ</td></tr>
+</table>
+
+<div class="note">
+このサンプルPDFは <code>scripts/generate_sample.sh</code> から再生成できます。READMEで使用しているスクリーンショットは、このPDFを開いた状態で撮影したものです。
+</div>
+
+</body>
+</html>
