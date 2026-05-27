@@ -22,6 +22,9 @@ struct MarkdownViewer: NSViewRepresentable {
     private func configure(_ tv: NSTextView) {
         tv.isEditable = false
         tv.isSelectable = true
+        if #available(macOS 15.0, *) {
+            tv.writingToolsBehavior = .none
+        }
         tv.isRichText = true
         tv.usesFindBar = true
         tv.isIncrementalSearchingEnabled = true
