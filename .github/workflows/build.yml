@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write   # needed to create/update the rolling release
+
 jobs:
   build:
     runs-on: macos-latest
@@ -40,14 +43,47 @@ jobs:
       - name: Create DMG
         run: |
           chmod +x scripts/make_dmg.sh
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           ./scripts/make_dmg.sh \
             build/Build/Products/Release/PreviewChat.app \
-            PreviewChat-${SHORT_SHA}.dmg
+            PreviewChat.dmg
 
+      # Upload as a plain artifact so it's visible in the Actions run detail page.
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewChat-${{ github.sha }}
-          path: PreviewChat-*.dmg
+          name: PreviewChat
+          path: PreviewChat.dmg
           retention-days: 30
+
+      # On pushes to main: update (or create) a rolling "latest" pre-release
+      # so the DMG is always downloadable from the Releases page.
+      - name: Update rolling release (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BODY="自動ビルド（main ブランチ最新: \`${SHORT_SHA}\`）
+
+          ## インストール
+          1. \`PreviewChat.dmg\` をダウンロード
+          2. ダブルクリックして開き、\`PreviewChat.app\` を **Applications** にドラッグ
+          3. 初回起動時は以下をターミナルで実行（隔離属性の解除）：
+             \`\`\`sh
+             sudo xattr -dr com.apple.quarantine /Applications/PreviewChat.app
+             \`\`\`
+          4. ダブルクリックで起動
+
+          ## 必要なもの
+          - [Claude Code CLI](https://docs.anthropic.com/ja/docs/claude-code)（\`claude\` コマンドが PATH にあること）"
+
+          # Delete existing 'latest' release and tag if present, then recreate
+          gh release delete latest --repo "${{ github.repository }}" --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+          gh release create latest PreviewChat.dmg \
+            --repo "${{ github.repository }}" \
+            --title "Latest build (main)" \
+            --notes "$BODY" \
+            --prerelease \
+            --target "${{ github.sha }}"
