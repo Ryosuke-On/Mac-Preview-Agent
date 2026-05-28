@@ -1,20 +1,105 @@
 # PreviewChat
 
-macOS 用のファイルビューワ（PDF / 画像 / Markdown）に、Claude Code を組み込んだチャットサイドバーを付けたアプリです。ダブルクリックでファイルを開き、右側のチャット欄でそのファイルについて質問できます。Claude は同じフォルダ内の他のファイルを読み込んだり、要約 Markdown を書き出したりできます — Claude Code と同じエージェント能力をそのまま使えます。
+PDF・画像・Markdown を閲覧しながら、Claude と対話できる macOS 用ファイルビューワです。ファイルを開くと右側にチャットサイドバーが現れ、そのファイルについて Claude に質問できます。Claude Code と同じエージェント能力をそのまま使えます。
 
-![screenshot](docs/screenshot.png)
+## スクリーンショット
 
-## 特徴
+### ウェルカム画面 — ドラッグ＆ドロップ・最近開いたファイル
 
-- **PDF**: PDFKit ベース。トラックパッドのピンチで拡大縮小、テキスト選択、システム標準の翻訳 / 調べる / 検索 (⌘F) がすべてネイティブ動作。
-- **画像**: ピンチズーム & パン。
-- **Markdown / テキスト**: `NSTextView` でレンダリング。検索バー、翻訳、辞書すべて利用可能。
-- **チャットサイドバー**: `claude` CLI を `stream-json` モードで常駐サブプロセスとして起動。作業ディレクトリは開いたファイルの親フォルダ、システムプロンプトに現在のファイルパスを注入します。
-- **ファイル別チャット履歴**: 同じファイルを再度開けば前回の会話が復元され、Claude 側も `--resume <session_id>` で同じ会話の続きから応答します。
-- **モデル選択**: ヘッダーのプルダウンから Haiku / Sonnet / Opus を切り替え可能（文脈は維持）。
-- **3:1 レイアウト**: ビューワ：チャットの幅比率は初期 3:1、ドラッグで調整した値は永続化されます。
-- **Enter で送信 / Shift+Enter で改行**: チャット入力欄の標準動作。
-- **ダブルクリックで起動**: `CFBundleDocumentTypes` で PDF / 画像 / Markdown / プレーンテキストに関連付け済。
+![welcome](docs/screenshot_welcome.png)
+
+### PDF + チャット — 要約・質問・エージェント操作
+
+![main](docs/screenshot_main.png)
+
+### 引用バッジ — PDF 箇所へのジャンプ・Web リンク
+
+![citations](docs/screenshot_citations.png)
+
+---
+
+## 主な機能
+
+### ファイルビューワ
+
+| 形式 | 機能 |
+|------|------|
+| **PDF** | PDFKit ベース。トラックパッドのピンチズーム・テキスト選択・システム翻訳・辞書がネイティブ動作。⌘F で PDF 内検索バー表示、マッチ箇所をハイライト。 |
+| **画像** | PNG / JPEG / HEIC / GIF / WebP 等。ピンチズーム＆パン対応。**Vision**: Claude がファイルを直接認識・説明。 |
+| **Markdown / テキスト** | NSTextView でレンダリング。⌘F でシステム標準の検索バー。翻訳・辞書・検索すべて利用可能。 |
+
+### チャットサイドバー
+
+- **ストリーミング応答** — Claude の回答がリアルタイムで流れ込む。途中で「停止」ボタンを押せばその時点で中断し、入力欄に送信済みテキストが復元される。
+- **Markdown + 数式レンダリング** — 回答は marked.js + KaTeX で整形。コードブロック・表・行列（`\begin{pmatrix}` 等）もきれいに表示。
+- **モデル選択** — ヘッダーの Haiku / Sonnet / Opus プルダウンでモデルを切り替え。文脈は維持される。
+- **ファイル別チャット履歴** — 同じファイルを再度開けば前回の会話が復元。Claude も `--resume <session_id>` で続きから応答する。
+- **トークンカウンタ** — ヘッダーに「累計 ↑Xk ↓Xk」、各 Claude 応答の下に「↑X ↓X tokens」を表示。
+- **チャット内検索** — チャット欄にフォーカスした状態で ⌘F。マッチ箇所が黄色ハイライト、件数を表示。
+- **PDF テキスト選択→質問** — PDF でテキストを選択して右クリック→「Claude に質問…」で、引用付きの質問文を自動入力。
+
+### 引用バッジ（Citations）
+
+Claude の回答に含まれる `[[cite:ページ|引用]]` マーカーが青いバッジに変換される。クリックすると PDF がそのページに飛び、引用テキストをハイライト。
+
+Web 検索・参照からの引用は `[[web:URL|ラベル]]` が緑の 🌐 バッジになり、クリックでブラウザが開く。
+
+### ウェルカム画面
+
+- ドラッグ＆ドロップでファイルを開く（点線枠エリア）
+- 最近開いたファイル一覧（Finder アイコン付き）
+- クリックで即座に再オープン
+
+### メニュー統合
+
+| メニュー | 操作 |
+|---------|------|
+| **ファイル** | ⌘O で開く、⌘P で印刷、ページ設定 |
+| **表示** | ズームイン / アウト / 実際のサイズ / ウィンドウに合わせる、⌘F で検索 |
+| **移動** | ← → で前後ページ、先頭・末尾ページ |
+
+### レイアウト
+
+- ビューワ：チャット = 初期 **3:1**。ドラッグで調整した幅は永続化（`@AppStorage`）。
+- チャットパネルは非表示ボタンで畳める。非表示中は右上に再表示ボタンが浮遊。
+
+---
+
+## 必要なもの
+
+- **macOS 14** 以上（macOS 15 / 26 で動作確認済み）
+- **[Claude Code](https://docs.anthropic.com/ja/docs/claude-code)** CLI（`claude` コマンドが PATH 上にある状態）
+- Xcode 15 以上（ビルド時）
+
+> Claude Code が未インストールの場合は `npm install -g @anthropic-ai/claude-code` でインストールしてください。
+
+---
+
+## ビルド
+
+```sh
+# 依存ツール（XcodeGen）
+brew install xcodegen
+
+# プロジェクト生成 & ビルド
+git clone https://github.com/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar.git
+cd Mac-Preview-ClaudeCode-Sidebar
+xcodegen generate
+open PreviewChat.xcodeproj   # Xcode で開いて ▶ ボタン
+```
+
+または CLI だけでビルド：
+
+```sh
+xcodebuild \
+  -project PreviewChat.xcodeproj \
+  -scheme PreviewChat \
+  -configuration Release \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+---
 
 ## ダウンロード（ビルド済みアプリ）
 
@@ -23,7 +108,7 @@ macOS 用のファイルビューワ（PDF / 画像 / Markdown）に、Claude Co
 ### インストール手順
 
 1. DMG をダブルクリックして開き、`PreviewChat.app` を **Applications** にドラッグ
-2. **ターミナルを開いて以下を 1 回実行**（未署名アプリの隔離属性を解除。パスワードを聞かれるので入力してください）：
+2. **ターミナルで以下を 1 回実行**（未署名アプリの隔離属性を解除）：
    ```sh
    sudo xattr -dr com.apple.quarantine /Applications/PreviewChat.app
    ```
@@ -31,109 +116,20 @@ macOS 用のファイルビューワ（PDF / 画像 / Markdown）に、Claude Co
 
 ### 「"PreviewChat" は壊れているため開けません」と出た場合
 
-これは未署名アプリに macOS が付ける `com.apple.quarantine` 属性のせいで、**アプリ自体は壊れていません**。上のステップ 2 のコマンドを実行してください。それで開けるようになります。
+`com.apple.quarantine` 属性のためで、アプリ自体は正常です。上の手順 2 のコマンドを実行してください。
 
-> なぜ必要か：このアプリは Apple Developer 証明書による署名・公証を行っていないため（個人プロジェクトなので $99/年の費用を払っていません）、macOS が安全のためブロックします。コマンドはその安全装置を「このアプリは信頼する」と手動で解除するためのものです。
+---
 
-### `Operation not permitted` と出る場合
+## アーキテクチャメモ
 
-macOS Sequoia 以降ではターミナルに権限が足りないことがあります。次のいずれかで対処してください：
+- **AppDelegate + NSHostingView** で NSWindow を手動管理（SwiftUI WindowGroup 非使用）。`.toolbar` はクラッシュするため NotificationCenter 経由でメニュー操作をルーティング。
+- **claude CLI** を `--output-format stream-json --verbose` で常駐サブプロセスとして起動。`assistant` イベントの `message.usage` と `result` イベントの `usage` の両方からトークン数を収集。
+- **WKWebView（PassthroughWebView）** でチャットメッセージをレンダリング。KaTeX + marked.js を埋め込み。スクロールイベントは `nextResponder` へ転送。
+- **PDFFindController** を ObservableObject として PDFKitContainer と SwiftUI find bar overlay が共有。
+- **Vision 対応**: PNG/JPEG/GIF/WebP は直接 Base64 エンコード、HEIC/TIFF/BMP は NSImage→NSBitmapImageRep→PNG に変換してから送信。
 
-- **方法A**: 上のコマンドは既に `sudo` 付きなのでパスワード入力で通るはずです。それでも `Operation not permitted` が出る場合は方法Bへ。
-- **方法B**: **システム設定** → **プライバシーとセキュリティ** → **フルディスクアクセス** で **ターミナル.app** を追加（既にあればONに）→ ターミナルを ⌘Q で完全終了して起動し直す → もう一度コマンドを実行。
-
-自分でソースからビルドしたい場合は[ビルド](#ビルド)へ。
-
-## 必要なもの
-
-- macOS 14 以上
-- Xcode 15 以上（ビルド時）
-- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) (`claude` が PATH 上にあること)
-
-## 認証
-
-チャットは内部で `claude` CLI を呼び出すので、認証もそれに従います。
-
-### 推奨: OAuth ログイン
-
-ターミナルで一度だけ実行してください。
-
-```sh
-claude /login
-```
-
-資格情報は `~/.claude.json` に保存され、次回以降 GUI アプリからもそのまま使えます。
-
-### 代替: API キー
-
-カスタムエンドポイントを使いたい場合や、API キー方式を好む場合は `~/.config/previewchat/config.json` に以下を置くと、アプリ起動時にサブプロセスへ環境変数として渡されます。
-
-```json
-{
-  "anthropicApiKey": "sk-ant-...",
-  "anthropicBaseUrl": "https://api.anthropic.com"
-}
-```
-
-ファイルがあればこちらが優先されます。
-
-## ビルド
-
-```sh
-brew install xcodegen
-git clone https://github.com/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar.git
-cd Mac-Preview-ClaudeCode-Sidebar
-xcodegen generate
-xcodebuild -scheme PreviewChat -derivedDataPath build CODE_SIGNING_ALLOWED=NO
-open build/Build/Products/Debug/PreviewChat.app
-```
-
-`PreviewChat.xcodeproj` は `project.yml` から `xcodegen` で生成するため、リポジトリには含めていません。
-
-## PreviewChat を既定のビューワにする
-
-ダブルクリックで PDF や画像が自動的に PreviewChat で開くようにする手順です。**PDF / 画像 / Markdown それぞれで一度ずつ設定する必要があります**（macOS の仕様）。
-
-### 手順（PDFの場合）
-
-1. Finder で**任意の PDF ファイル**を 1 つ選び、右クリック（または ⌘+I）→ **情報を見る** を開く
-2. 情報ウィンドウの中ほどにある **このアプリケーションで開く** という欄を見つける（折りたたまれていれば三角アイコンをクリックして展開）
-3. ドロップダウンメニューをクリックして **PreviewChat.app** を選択
-   - 一覧に出てこない場合は **その他...** → Applications フォルダの `PreviewChat.app` を選択
-4. すぐ下の **すべてを変更...** ボタンをクリック
-5. 確認ダイアログで **続ける** を押す
-6. 情報ウィンドウを閉じる
-
-以降、すべての PDF ファイルがダブルクリックで PreviewChat で開きます。
-
-### 画像 / Markdown も同様に
-
-画像ファイル（PNG / JPG など）や Markdown (`.md`) でも同じ手順で個別に設定してください。Markdown はもともと関連付けされていない場合があるので、その時はドロップダウンの **その他...** から PreviewChat を選びます。
-
-### 元に戻したいとき
-
-同じ手順で **このアプリケーションで開く** から **プレビュー.app**（標準のプレビューアプリ）を選んで **すべてを変更...** を押せば戻ります。
-
-## 使い方のコツ
-
-- 「この PDF の要点を 3 つにまとめて」のように、自然言語で質問するだけ。
-- 「同じフォルダにある `notes.md` も参照して」と指示すれば Claude が読み込みます。
-- 「要約を `summary.md` として保存して」と頼めばそのまま書き出します（`--permission-mode acceptEdits` で承認なしに書き込めます。挙動を厳格にしたい場合は [`ClaudeAgent.swift`](Sources/PreviewChat/ClaudeAgent.swift) を編集してください）。
-
-## サンプルPDF
-
-`docs/sample.pdf` はアプリの動作確認用に同梱しているオリジナル文書です。スクリーンショットもこのPDFを開いた状態のもの。再生成は：
-
-```sh
-./scripts/generate_sample.sh
-```
-
-（WebKit経由でHTMLをPDF化します）
-
-## 依存ライブラリ
-
-- [swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui) — チャット応答の Markdown レンダリングに使用
+---
 
 ## ライセンス
 
-MIT License — [LICENSE](LICENSE) を参照してください。
+MIT

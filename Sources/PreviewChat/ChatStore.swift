@@ -11,6 +11,8 @@ struct ChatStore {
         var role: String        // "user" | "assistant" | "tool" | "system"
         var text: String
         var toolName: String?
+        var inputTokens: Int?
+        var outputTokens: Int?
     }
 
     static var rootDir: URL {

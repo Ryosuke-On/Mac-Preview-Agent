@@ -5,19 +5,12 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
 
-packages:
-  MarkdownUI:
-    url: https://github.com/gonzalezreal/swift-markdown-ui
-    from: "2.4.0"
-
 targets:
   PreviewChat:
     type: application
     platform: macOS
     sources:
       - path: Sources/PreviewChat
-    dependencies:
-      - package: MarkdownUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ryosuke.PreviewChat
