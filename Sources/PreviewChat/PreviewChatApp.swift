@@ -125,54 +125,66 @@ struct PreviewChatApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    /// True once we know that files were passed at launch (suppresses automatic welcome window).
-    private var fileOpenedAtLaunch = false
+    /// Controllers for currently-open file (viewer) windows. Used to decide whether a
+    /// welcome window is needed, and to avoid popping one up while files are being opened.
+    private var fileWindowControllers: [NSWindowController] = []
 
-    func applicationWillFinishLaunching(_ notification: Notification) {
-        // application(_:open:) fires *before* applicationDidFinishLaunching when files are
-        // passed on the command line / Finder double-click.  We set the flag here so that
-        // applicationDidFinishLaunching can skip showing the welcome window.
-    }
+    /// The single welcome window, if one is currently shown.
+    private weak var welcomeWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if !fileOpenedAtLaunch {
-            // No files were opened at launch — show the welcome window.
-            // The SwiftUI WindowGroup may have already created one; if not, create it now.
-            DispatchQueue.main.async {
-                if NSApp.windows.filter({ $0.isVisible && $0.title == "PreviewChat" }).isEmpty {
-                    self.showWelcomeWindow()
-                }
+        // When launched by double-clicking a file, application(_:open:) can arrive either
+        // just before or just after launch finishes. Defer the welcome decision so that, if
+        // a file is on its way in, we never show a redundant welcome window next to it.
+        scheduleWelcomeIfNoFiles()
+    }
+
+    // Finder double-click, drag onto the dock icon, `open` command, etc.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        closeWelcomeWindow()
+        for url in urls { openWindow(for: url) }
+    }
+
+    // WelcomeView "open" button and recent-file rows.
+    @objc func openURL(_ sender: Any?) {
+        guard let url = sender as? URL else { return }
+        closeWelcomeWindow()
+        openWindow(for: url)
+    }
+
+    // Dock-icon click with no visible windows → bring the welcome window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { scheduleWelcomeIfNoFiles() }
+        return false
+    }
+
+    // MARK: - Window management
+
+    /// Show the welcome window only if, after letting any in-flight file open settle, there
+    /// are still no file windows open. The short delay lets application(_:open:) run first.
+    private func scheduleWelcomeIfNoFiles() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self else { return }
+            if self.fileWindowControllers.isEmpty && self.welcomeWindow == nil {
+                self.showWelcomeWindow()
             }
         }
     }
 
-    // Called when files are opened via Finder double-click, drag onto dock, etc.
-    func application(_ application: NSApplication, open urls: [URL]) {
-        fileOpenedAtLaunch = true
-        closeWelcomeWindows()
-        for url in urls { openWindow(for: url) }
-    }
-
-    // Called from WelcomeView file panel and recent-file rows.
-    @objc func openURL(_ sender: Any?) {
-        if let url = sender as? URL {
-            closeWelcomeWindows()
-            openWindow(for: url)
-        }
-    }
-
-    // Re-show welcome when dock icon is clicked with no visible windows.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { showWelcomeWindow() }
-        return false
-    }
-
-    // MARK: - Private helpers
-
     private func openWindow(for url: URL) {
         RecentFiles.record(url)
-        let controller = NSWindowController(window: makeWindow(for: url))
+        let window = makeWindow(for: url)
+        let controller = NSWindowController(window: window)
+        fileWindowControllers.append(controller)
         controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+
+        // Drop the controller when its window closes so the open-file count stays accurate.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            self?.fileWindowControllers.removeAll { $0.window === window }
+        }
     }
 
     private func makeWindow(for url: URL) -> NSWindow {
@@ -188,17 +200,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return window
     }
 
-    /// Close any windows that are showing the WelcomeView (title == app name).
-    private func closeWelcomeWindows() {
+    /// Close the welcome window (and any stray ones identified by title).
+    private func closeWelcomeWindow() {
         for window in NSApp.windows where window.title == "PreviewChat" {
             window.close()
         }
+        welcomeWindow = nil
     }
 
-    /// Show a new WelcomeView window (e.g. when dock icon is clicked with no windows).
+    /// Show (or re-focus) the welcome window.
     func showWelcomeWindow() {
-        // Reuse an existing (hidden) welcome window if possible.
-        if let existing = NSApp.windows.first(where: { $0.title == "PreviewChat" }) {
+        if let existing = welcomeWindow {
             existing.makeKeyAndOrderFront(nil)
             return
         }
@@ -210,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.contentView = NSHostingView(rootView: WelcomeView())
         window.isReleasedWhenClosed = false
+        welcomeWindow = window
         window.makeKeyAndOrderFront(nil)
     }
 }
