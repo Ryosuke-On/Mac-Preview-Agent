@@ -43,7 +43,7 @@ jobs:
             PreviewAgent-${{ github.ref_name }}.dmg
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: PreviewAgent-${{ github.ref_name }}.dmg
           generate_release_notes: true
