@@ -64,5 +64,7 @@ jobs:
 
             ## 別途必要なもの
 
-            - [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) (`claude` コマンド)
-            - ターミナルで `claude /login` を一度実行
+            使いたいエージェントの CLI が PATH 上にあれば動作します（両方入れて切り替えも可）。
+
+            - **Claude を使う場合** — [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)（`claude` コマンド）。ターミナルで `claude /login` を一度実行。
+            - **Codex を使う場合** — `codex` CLI。[Codex デスクトップアプリ](https://chatgpt.com/codex)に ChatGPT アカウントでログイン済みなら、CLI を同梱し認証も共有するため追加操作は不要。CLI 単体で使う場合のみ `codex login` を実行。
