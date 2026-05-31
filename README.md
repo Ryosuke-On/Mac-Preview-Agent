@@ -3,8 +3,8 @@
 **Agentic viewing for any file.** PDF・画像・Markdown を閲覧しながら、Claude / Codex と対話できる macOS 用ファイルビューワです。ファイルを開くと右側にチャットサイドバーが現れ、そのファイルについて好きなエージェントに質問・要約・引用つき回答をさせられます。
 
 <p align="center">
-  <a href="https://github.com/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar?label=Download+DMG&style=for-the-badge&logo=apple&logoColor=white&color=007AFF" alt="Download DMG">
+  <a href="https://github.com/Ryosuke-On/Mac-Preview-Agent/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Ryosuke-On/Mac-Preview-Agent?label=Download+DMG&style=for-the-badge&logo=apple&logoColor=white&color=007AFF" alt="Download DMG">
   </a>
 </p>
 
@@ -95,7 +95,7 @@ Web 検索・参照からの引用は `[[web:URL|ラベル]]` が緑の 🌐 バ
 
 ## ダウンロード（ビルド済みアプリ）
 
-[Releases ページ](https://github.com/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar/releases/latest) から `PreviewAgent-vX.Y.Z.dmg`（または最新ビルドの `PreviewAgent.dmg`）をダウンロードしてください。
+[Releases ページ](https://github.com/Ryosuke-On/Mac-Preview-Agent/releases/latest) から `PreviewAgent-vX.Y.Z.dmg`（または最新ビルドの `PreviewAgent.dmg`）をダウンロードしてください。
 
 ### インストール手順
 
@@ -119,8 +119,8 @@ Web 検索・参照からの引用は `[[web:URL|ラベル]]` が緑の 🌐 バ
 brew install xcodegen
 
 # プロジェクト生成 & ビルド
-git clone https://github.com/Ryosuke-On/Mac-Preview-ClaudeCode-Sidebar.git
-cd Mac-Preview-ClaudeCode-Sidebar
+git clone https://github.com/Ryosuke-On/Mac-Preview-Agent.git
+cd Mac-Preview-Agent
 xcodegen generate
 open PreviewAgent.xcodeproj   # Xcode で開いて ▶ ボタン
 ```
