@@ -9,8 +9,12 @@ struct ContentView: View {
     @AppStorage("chatPaneVisible") private var chatVisible: Bool = true
 
     private let minViewer: CGFloat = 320
-    private let minChat: CGFloat = 220
+    /// Wide enough that the chat header (agent + model pickers, buttons) fits on one
+    /// row and isn't crushed under the divider overlay at the narrowest setting.
+    private let minChat: CGFloat = 340
     private let maxChat: CGFloat = 700
+    /// Width of the draggable splitter column (full hit area, not just the hairline).
+    private let splitterWidth: CGFloat = 11
 
     var body: some View {
         GeometryReader { geo in
@@ -23,7 +27,7 @@ struct ContentView: View {
             )
             HStack(spacing: 0) {
                 viewerPane
-                    .frame(width: chatVisible ? total - chatW - 1 : total)
+                    .frame(width: chatVisible ? total - chatW : total)
                     .overlay(alignment: .topTrailing) {
                         if !chatVisible {
                             Button {
@@ -41,13 +45,6 @@ struct ContentView: View {
                         }
                     }
                 if chatVisible {
-                    SplitterHandle(
-                        startWidth: chatW,
-                        lower: minChat,
-                        upper: min(maxChat, max(minChat, total - minViewer)),
-                        onCommit: { storedChatWidth = Double($0) }
-                    )
-                    .frame(width: 1)
                     ChatView(fileURL: fileURL,
                              onHide: { withAnimation(.easeInOut(duration: 0.2)) { chatVisible = false } })
                         .frame(width: chatW)
@@ -55,6 +52,22 @@ struct ContentView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: chatVisible)
+            // Draggable divider sits ON TOP of the boundary as an overlay, so SwiftUI
+            // hit-testing routes mouse events to it instead of the adjacent panes.
+            // (As a thin HStack column between two hosted NSViews it never received the
+            // mouse-down — the neighbors claimed the hit region.)
+            .overlay(alignment: .leading) {
+                if chatVisible {
+                    SplitterHandle(
+                        startWidth: chatW,
+                        lower: minChat,
+                        upper: min(maxChat, max(minChat, total - minViewer)),
+                        onCommit: { storedChatWidth = Double($0) }
+                    )
+                    .frame(width: splitterWidth)
+                    .offset(x: total - chatW - splitterWidth / 2)
+                }
+            }
         }
         // Observe chat-toggle notification posted by the menu (⌘\).
         .onReceive(NotificationCenter.default.publisher(for: .pcChatToggle)) { _ in
@@ -95,37 +108,109 @@ struct ContentView: View {
 
 // MARK: - Splitter
 
-/// 1px hairline divider with a wider invisible hit area + resize cursor.
+/// Draggable divider. Both the hairline drawing and the drag/cursor handling live
+/// entirely inside an AppKit NSView. A SwiftUI `DragGesture` does not reliably receive
+/// mouse events on a thin strip adjacent to the PDFView (itself a hosted NSView), and
+/// mixing a SwiftUI `Rectangle` into the same ZStack puts a SwiftUI layer on top that
+/// swallows the mouse-down before it reaches the NSView.
 private struct SplitterHandle: View {
     let startWidth: CGFloat
     let lower: CGFloat
     let upper: CGFloat
     var onCommit: (CGFloat) -> Void
-    @State private var hovering = false
-    @State private var dragStartWidth: CGFloat? = nil
 
     var body: some View {
-        ZStack {
-            Color.clear
-                .frame(width: 8)
-                .contentShape(Rectangle())
-            Rectangle()
-                .fill(Color.secondary.opacity(hovering ? 0.5 : 0.25))
-                .frame(width: 1)
+        SplitterMouseView(startWidth: startWidth, lower: lower, upper: upper, onCommit: onCommit)
+    }
+}
+
+private struct SplitterMouseView: NSViewRepresentable {
+    let startWidth: CGFloat
+    let lower: CGFloat
+    let upper: CGFloat
+    var onCommit: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> DragNSView {
+        let v = DragNSView()
+        v.coordinator = context.coordinator
+        return v
+    }
+
+    func updateNSView(_ nsView: DragNSView, context: Context) {
+        context.coordinator.currentWidth = startWidth
+        context.coordinator.lower = lower
+        context.coordinator.upper = upper
+        context.coordinator.onCommit = onCommit
+    }
+
+    final class Coordinator {
+        var currentWidth: CGFloat = 0
+        var lower: CGFloat = 0
+        var upper: CGFloat = 0
+        var onCommit: (CGFloat) -> Void = { _ in }
+    }
+
+    final class DragNSView: NSView {
+        weak var coordinator: Coordinator?
+
+        override var acceptsFirstResponder: Bool { true }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        // Draw the hairline ourselves so no SwiftUI layer needs to sit on top.
+        override func draw(_ dirtyRect: NSRect) {
+            NSColor.separatorColor.setFill()
+            NSRect(x: (bounds.width - 1) / 2, y: 0, width: 1, height: bounds.height).fill()
         }
-        .onHover { inside in
-            hovering = inside
-            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+
+        // Guarantee this view wins hit-testing across its full bounds.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            bounds.contains(convert(point, from: superview)) ? self : nil
         }
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let base = dragStartWidth ?? startWidth
-                    if dragStartWidth == nil { dragStartWidth = base }
-                    let target = base - value.translation.width
-                    onCommit(max(lower, min(upper, target)))
-                }
-                .onEnded { _ in dragStartWidth = nil }
-        )
+
+        // Use a tracking area (re-added on every layout) rather than cursor rects,
+        // so the resize cursor covers the full width even as the view's frame moves
+        // with the divider.
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.activeInActiveApp, .inVisibleRect, .mouseEnteredAndExited, .cursorUpdate],
+                owner: self
+            ))
+        }
+
+        override func cursorUpdate(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            NSCursor.resizeLeftRight.set()
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            NSCursor.arrow.set()
+        }
+
+        // Run an explicit event-tracking loop rather than relying on mouseDragged
+        // delivery, which is unreliable for a thin SwiftUI-hosted NSView wedged
+        // next to the PDFView's own NSView.
+        override func mouseDown(with event: NSEvent) {
+            guard let c = coordinator, let window = self.window else { return }
+            let baseWidth = c.currentWidth
+            let startX = event.locationInWindow.x
+            window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp],
+                               timeout: .greatestFiniteMagnitude,
+                               mode: .eventTracking) { ev, stop in
+                guard let ev = ev else { return }
+                if ev.type == .leftMouseUp { stop.pointee = true; return }
+                // Chat panel is on the right: dragging left (negative dx) widens it.
+                let dx = ev.locationInWindow.x - startX
+                let target = baseWidth - dx
+                c.onCommit(max(c.lower, min(c.upper, target)))
+            }
+        }
     }
 }

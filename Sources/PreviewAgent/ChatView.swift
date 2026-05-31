@@ -53,9 +53,13 @@ struct ChatMessage: Identifiable, Equatable {
 }
 
 enum ModelChoice: String, CaseIterable, Identifiable {
-    case claudeHaiku  = "claude-haiku-4-5"
-    case claudeSonnet = "claude-sonnet-4-6"
-    case claudeOpus   = "claude-opus-4-7"
+    // Use the CLI's version-agnostic aliases (not pinned `claude-…-4-x` names) so the
+    // picker keeps working when Anthropic ships a new model version — `claude --model
+    // sonnet` always resolves to the latest Sonnet. Codex's `gpt-5*` names are already
+    // rolling aliases on OpenAI's side, and "Default" omits --model entirely.
+    case claudeHaiku  = "haiku"
+    case claudeSonnet = "sonnet"
+    case claudeOpus   = "opus"
     case codexDefault = "codex-default"
     case gpt5Codex    = "gpt-5-codex"
     case gpt5         = "gpt-5"
@@ -126,7 +130,12 @@ struct ChatView: View {
         case .codex: modelKey = "preferredCodexModel"
         }
         let fallback = ModelChoice.fallback(for: agentKind)
-        let model = UserDefaults.standard.string(forKey: modelKey) ?? fallback.rawValue
+        // Discard any stale/legacy stored value (e.g. a previously pinned
+        // "claude-sonnet-4-6") that no longer maps to a known choice for this agent.
+        let storedModel = UserDefaults.standard.string(forKey: modelKey)
+            .flatMap(ModelChoice.init(rawValue:))
+            .flatMap { $0.agentKind == agentKind ? $0 : nil }
+        let model = (storedModel ?? fallback).rawValue
         _agent = StateObject(wrappedValue: ClaudeAgent(
             fileURL: fileURL,
             agentKind: agentKind,
