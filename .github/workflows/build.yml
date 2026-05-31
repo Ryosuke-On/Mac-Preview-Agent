@@ -30,29 +30,29 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project PreviewChat.xcodeproj \
-            -scheme PreviewChat \
+            -project PreviewAgent.xcodeproj \
+            -scheme PreviewAgent \
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Verify app bundle
-        run: test -d build/Build/Products/Release/PreviewChat.app
+        run: test -d build/Build/Products/Release/PreviewAgent.app
 
       - name: Create DMG
         run: |
           chmod +x scripts/make_dmg.sh
           ./scripts/make_dmg.sh \
-            build/Build/Products/Release/PreviewChat.app \
-            PreviewChat.dmg
+            build/Build/Products/Release/PreviewAgent.app \
+            PreviewAgent.dmg
 
       # Upload as a plain artifact so it's visible in the Actions run detail page.
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PreviewChat
-          path: PreviewChat.dmg
+          name: PreviewAgent
+          path: PreviewAgent.dmg
           retention-days: 30
 
       # On pushes to main: update (or create) a rolling "latest" pre-release
@@ -66,11 +66,11 @@ jobs:
           BODY="自動ビルド（main ブランチ最新: \`${SHORT_SHA}\`）
 
           ## インストール
-          1. \`PreviewChat.dmg\` をダウンロード
-          2. ダブルクリックして開き、\`PreviewChat.app\` を **Applications** にドラッグ
+          1. \`PreviewAgent.dmg\` をダウンロード
+          2. ダブルクリックして開き、\`PreviewAgent.app\` を **Applications** にドラッグ
           3. 初回起動時は以下をターミナルで実行（隔離属性の解除）：
              \`\`\`sh
-             sudo xattr -dr com.apple.quarantine /Applications/PreviewChat.app
+             sudo xattr -dr com.apple.quarantine /Applications/PreviewAgent.app
              \`\`\`
           4. ダブルクリックで起動
 
@@ -81,7 +81,7 @@ jobs:
           gh release delete latest --repo "${{ github.repository }}" --yes 2>/dev/null || true
           git push origin :refs/tags/latest 2>/dev/null || true
 
-          gh release create latest PreviewChat.dmg \
+          gh release create latest PreviewAgent.dmg \
             --repo "${{ github.repository }}" \
             --title "Latest build (main)" \
             --notes "$BODY" \

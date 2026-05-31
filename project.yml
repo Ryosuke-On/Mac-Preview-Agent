@@ -1,4 +1,4 @@
-name: PreviewChat
+name: PreviewAgent
 options:
   bundleIdPrefix: com.ryosuke
   deploymentTarget:
@@ -6,19 +6,19 @@ options:
   createIntermediateGroups: true
 
 targets:
-  PreviewChat:
+  PreviewAgent:
     type: application
     platform: macOS
     sources:
-      - path: Sources/PreviewChat
+      - path: Sources/PreviewAgent
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ryosuke.PreviewChat
-        PRODUCT_NAME: PreviewChat
+        PRODUCT_BUNDLE_IDENTIFIER: com.ryosuke.PreviewAgent
+        PRODUCT_NAME: PreviewAgent
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Sources/PreviewChat/Info.plist
+        INFOPLIST_FILE: Sources/PreviewAgent/Info.plist
         SWIFT_VERSION: "5.10"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"

@@ -28,8 +28,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project PreviewChat.xcodeproj \
-            -scheme PreviewChat \
+            -project PreviewAgent.xcodeproj \
+            -scheme PreviewAgent \
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
@@ -39,26 +39,26 @@ jobs:
         run: |
           chmod +x scripts/make_dmg.sh
           ./scripts/make_dmg.sh \
-            build/Build/Products/Release/PreviewChat.app \
-            PreviewChat-${{ github.ref_name }}.dmg
+            build/Build/Products/Release/PreviewAgent.app \
+            PreviewAgent-${{ github.ref_name }}.dmg
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: PreviewChat-${{ github.ref_name }}.dmg
+          files: PreviewAgent-${{ github.ref_name }}.dmg
           generate_release_notes: true
           body: |
             ## インストール
 
-            1. `PreviewChat-${{ github.ref_name }}.dmg` をダウンロード
-            2. ダブルクリックして開き、`PreviewChat.app` を **Applications** にドラッグ
+            1. `PreviewAgent-${{ github.ref_name }}.dmg` をダウンロード
+            2. ダブルクリックして開き、`PreviewAgent.app` を **Applications** にドラッグ
             3. **ターミナルで以下を 1 回実行**（未署名アプリの隔離属性を解除。パスワードを聞かれます）：
                ```sh
-               sudo xattr -dr com.apple.quarantine /Applications/PreviewChat.app
+               sudo xattr -dr com.apple.quarantine /Applications/PreviewAgent.app
                ```
             4. ダブルクリックで起動
 
-            ### 「"PreviewChat" は壊れているため開けません」と出る場合
+            ### 「"PreviewAgent" は壊れているため開けません」と出る場合
 
             未署名アプリに macOS が付ける `com.apple.quarantine` 属性のせいで、アプリ自体は壊れていません。上のステップ 3 のコマンドで隔離属性を解除してください。
 

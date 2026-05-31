@@ -53,12 +53,42 @@ struct ChatMessage: Identifiable, Equatable {
 }
 
 enum ModelChoice: String, CaseIterable, Identifiable {
-    case haiku  = "claude-haiku-4-5"
-    case sonnet = "claude-sonnet-4-6"
-    case opus   = "claude-opus-4-7"
+    case claudeHaiku  = "claude-haiku-4-5"
+    case claudeSonnet = "claude-sonnet-4-6"
+    case claudeOpus   = "claude-opus-4-7"
+    case codexDefault = "codex-default"
+    case gpt5Codex    = "gpt-5-codex"
+    case gpt5         = "gpt-5"
+
     var id: String { rawValue }
+
+    var agentKind: AgentKind {
+        switch self {
+        case .claudeHaiku, .claudeSonnet, .claudeOpus: .claude
+        case .codexDefault, .gpt5Codex, .gpt5: .codex
+        }
+    }
+
     var label: String {
-        switch self { case .haiku: "Haiku"; case .sonnet: "Sonnet"; case .opus: "Opus" }
+        switch self {
+        case .claudeHaiku: "Haiku"
+        case .claudeSonnet: "Sonnet"
+        case .claudeOpus: "Opus"
+        case .codexDefault: "Default"
+        case .gpt5Codex: "GPT-5 Codex"
+        case .gpt5: "GPT-5"
+        }
+    }
+
+    static func choices(for agentKind: AgentKind) -> [ModelChoice] {
+        allCases.filter { $0.agentKind == agentKind }
+    }
+
+    static func fallback(for agentKind: AgentKind) -> ModelChoice {
+        switch agentKind {
+        case .claude: .claudeSonnet
+        case .codex: .codexDefault
+        }
     }
 }
 
@@ -72,7 +102,9 @@ struct ChatView: View {
     @State private var messages: [ChatMessage] = []
     @State private var input: String = ""
     @State private var streamingIndex: Int? = nil
-    @AppStorage("preferredModel") private var preferredModelRaw: String = ModelChoice.sonnet.rawValue
+    @AppStorage("preferredAgent") private var preferredAgentRaw: String = AgentKind.claude.rawValue
+    @AppStorage("preferredClaudeModel") private var preferredClaudeModelRaw: String = ModelChoice.claudeSonnet.rawValue
+    @AppStorage("preferredCodexModel") private var preferredCodexModelRaw: String = ModelChoice.codexDefault.rawValue
     @State private var showClearConfirm = false
 
     // Chat search state
@@ -84,9 +116,20 @@ struct ChatView: View {
         self.fileURL = fileURL
         self.onHide = onHide
         let saved = ChatStore.load(for: fileURL)
-        let model = UserDefaults.standard.string(forKey: "preferredModel") ?? ModelChoice.sonnet.rawValue
+        let savedAgent = saved?.agentKind.flatMap(AgentKind.init(rawValue:))
+        let agentKind = savedAgent
+            ?? AgentKind(rawValue: UserDefaults.standard.string(forKey: "preferredAgent") ?? "")
+            ?? .claude
+        let modelKey: String
+        switch agentKind {
+        case .claude: modelKey = "preferredClaudeModel"
+        case .codex: modelKey = "preferredCodexModel"
+        }
+        let fallback = ModelChoice.fallback(for: agentKind)
+        let model = UserDefaults.standard.string(forKey: modelKey) ?? fallback.rawValue
         _agent = StateObject(wrappedValue: ClaudeAgent(
             fileURL: fileURL,
+            agentKind: agentKind,
             model: model,
             resumeSessionId: saved?.sessionId
         ))
@@ -161,6 +204,9 @@ struct ChatView: View {
                                 inputTokens: $0.inputTokens,
                                 outputTokens: $0.outputTokens)
                 }
+                if let savedKind = saved.agentKind, let kind = AgentKind(rawValue: savedKind) {
+                    preferredAgentRaw = kind.rawValue
+                }
             }
             agent.onEvent = { handleEvent($0) }
             agent.onSessionId = { _ in persist() }
@@ -203,7 +249,7 @@ struct ChatView: View {
             Button("消去", role: .destructive) { clearHistory() }
             Button("キャンセル", role: .cancel) {}
         } message: {
-            Text("このファイルに紐づく会話と Claude セッションを削除します。")
+            Text("このファイルに紐づく会話とエージェントセッションを削除します。")
         }
     }
 
@@ -212,15 +258,21 @@ struct ChatView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(.tint)
-            Text(fileURL.lastPathComponent).font(.headline).lineLimit(1).truncationMode(.middle)
-            Spacer()
             Picker("", selection: Binding(
-                get: { ModelChoice(rawValue: preferredModelRaw) ?? .sonnet },
-                set: { preferredModelRaw = $0.rawValue; agent.setModel($0.rawValue) }
+                get: { selectedAgent },
+                set: { setAgent($0) }
             )) {
-                ForEach(ModelChoice.allCases) { Text($0.label).tag($0) }
+                ForEach(AgentKind.allCases) { Text($0.label).tag($0) }
             }
-            .pickerStyle(.menu).labelsHidden().frame(width: 90)
+            .pickerStyle(.menu).labelsHidden().frame(width: 84)
+            Picker("", selection: Binding(
+                get: { selectedModel },
+                set: { setModel($0) }
+            )) {
+                ForEach(ModelChoice.choices(for: selectedAgent)) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.menu).labelsHidden().frame(width: 116)
+            Spacer(minLength: 0)
             Button { showClearConfirm = true } label: { Image(systemName: "trash") }
                 .buttonStyle(.borderless).help("チャット履歴を消去")
             if let onHide {
@@ -230,6 +282,38 @@ struct ChatView: View {
             Circle().fill(agent.isRunning ? Color.green : Color.gray).frame(width: 8, height: 8)
         }
         .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
+    }
+
+    private var selectedAgent: AgentKind {
+        AgentKind(rawValue: preferredAgentRaw) ?? .claude
+    }
+
+    private var selectedModel: ModelChoice {
+        let raw: String
+        switch selectedAgent {
+        case .claude: raw = preferredClaudeModelRaw
+        case .codex: raw = preferredCodexModelRaw
+        }
+        let choice = ModelChoice(rawValue: raw) ?? ModelChoice.fallback(for: selectedAgent)
+        return choice.agentKind == selectedAgent ? choice : ModelChoice.fallback(for: selectedAgent)
+    }
+
+    private func setAgent(_ kind: AgentKind) {
+        preferredAgentRaw = kind.rawValue
+        let model = selectedModel
+        agent.setAgent(kind: kind, model: model.rawValue)
+        streamingIndex = nil
+        persist()
+    }
+
+    private func setModel(_ model: ModelChoice) {
+        if model.agentKind == .claude {
+            preferredClaudeModelRaw = model.rawValue
+        } else {
+            preferredCodexModelRaw = model.rawValue
+        }
+        agent.setModel(model.rawValue)
+        persist()
     }
 
     /// Session-cumulative token counter shown just under the header.
@@ -242,13 +326,16 @@ struct ChatView: View {
                     Text(formatTokens(agent.totalInputTokens)).monospacedDigit()
                     Image(systemName: "arrow.down").font(.system(size: 9))
                     Text(formatTokens(agent.totalOutputTokens)).monospacedDigit()
+                    if agent.totalCostUSD > 0 {
+                        Text(String(format: "$%.4f", agent.totalCostUSD)).monospacedDigit()
+                    }
                     Spacer()
                 }
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
-                .help("このセッションの累計: 入力 \(agent.totalInputTokens) tok / 出力 \(agent.totalOutputTokens) tok")
+                .help("このセッションの累計: 入力 \(agent.totalInputTokens) tok / 出力 \(agent.totalOutputTokens) tok" + (agent.totalCostUSD > 0 ? String(format: " / $%.4f", agent.totalCostUSD) : ""))
             }
         }
     }
@@ -453,6 +540,8 @@ struct ChatView: View {
                       inputTokens: $0.inputTokens, outputTokens: $0.outputTokens)
             },
             sessionId: agent.sessionId
+            ,
+            agentKind: agent.agentKind.rawValue
         ), for: fileURL)
     }
 
@@ -466,6 +555,8 @@ struct ChatView: View {
             case "Grep":  if let p = obj["pattern"]   as? String { return "Grep \(p)" }
             case "Glob":  if let p = obj["pattern"]   as? String { return "Glob \(p)" }
             case "Bash":  if let c = obj["command"]   as? String { return "Bash $ \(c)" }
+            case "WebSearch": if let q = obj["query"] as? String { return "WebSearch \(q)" }
+            case "WebFetch":  if let u = obj["url"]   as? String { return "WebFetch \(u)" }
             default: break
             }
         }
@@ -725,4 +816,3 @@ extension String {
         return attr
     }
 }
-

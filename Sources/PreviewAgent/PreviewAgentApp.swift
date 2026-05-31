@@ -5,29 +5,29 @@ import UniformTypeIdentifiers
 // MARK: - Viewer notification names
 // Menus post these; PDFViewer / MarkdownViewer / ImageViewer observe them.
 extension NSNotification.Name {
-    static let pcPrint      = NSNotification.Name("PreviewChat.print")
-    static let pcZoomIn     = NSNotification.Name("PreviewChat.zoomIn")
-    static let pcZoomOut    = NSNotification.Name("PreviewChat.zoomOut")
-    static let pcActualSize = NSNotification.Name("PreviewChat.actualSize")
-    static let pcZoomToFit  = NSNotification.Name("PreviewChat.zoomToFit")
-    static let pcFirstPage  = NSNotification.Name("PreviewChat.firstPage")
-    static let pcPrevPage   = NSNotification.Name("PreviewChat.prevPage")
-    static let pcNextPage   = NSNotification.Name("PreviewChat.nextPage")
-    static let pcLastPage   = NSNotification.Name("PreviewChat.lastPage")
-    static let pcChatToggle = NSNotification.Name("PreviewChat.chatToggle")
-    static let pcFind       = NSNotification.Name("PreviewChat.find")
+    static let pcPrint      = NSNotification.Name("PreviewAgent.print")
+    static let pcZoomIn     = NSNotification.Name("PreviewAgent.zoomIn")
+    static let pcZoomOut    = NSNotification.Name("PreviewAgent.zoomOut")
+    static let pcActualSize = NSNotification.Name("PreviewAgent.actualSize")
+    static let pcZoomToFit  = NSNotification.Name("PreviewAgent.zoomToFit")
+    static let pcFirstPage  = NSNotification.Name("PreviewAgent.firstPage")
+    static let pcPrevPage   = NSNotification.Name("PreviewAgent.prevPage")
+    static let pcNextPage   = NSNotification.Name("PreviewAgent.nextPage")
+    static let pcLastPage   = NSNotification.Name("PreviewAgent.lastPage")
+    static let pcChatToggle = NSNotification.Name("PreviewAgent.chatToggle")
+    static let pcFind       = NSNotification.Name("PreviewAgent.find")
     /// Posted with userInfo: ["page": Int (1-based), "quote": String]
-    static let pcJumpToCitation = NSNotification.Name("PreviewChat.jumpToCitation")
+    static let pcJumpToCitation = NSNotification.Name("PreviewAgent.jumpToCitation")
     /// Posted with userInfo: ["text": String, "page": Int?]
-    static let pcAskAboutSelection = NSNotification.Name("PreviewChat.askAboutSelection")
+    static let pcAskAboutSelection = NSNotification.Name("PreviewAgent.askAboutSelection")
     /// Focus the chat input field (e.g. after inserting a quoted selection).
-    static let pcFocusChatInput = NSNotification.Name("PreviewChat.focusChatInput")
+    static let pcFocusChatInput = NSNotification.Name("PreviewAgent.focusChatInput")
 }
 
 // MARK: - App
 
 @main
-struct PreviewChatApp: App {
+struct PreviewAgentApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -202,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Close the welcome window (and any stray ones identified by title).
     private func closeWelcomeWindow() {
-        for window in NSApp.windows where window.title == "PreviewChat" {
+        for window in NSApp.windows where window.title == "PreviewAgent" {
             window.close()
         }
         welcomeWindow = nil
@@ -218,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 440),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = "PreviewChat"
+        window.title = "PreviewAgent"
         window.center()
         window.contentView = NSHostingView(rootView: WelcomeView())
         window.isReleasedWhenClosed = false
@@ -265,9 +265,9 @@ struct WelcomeView: View {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.system(size: 56))
                     .foregroundStyle(.tint)
-                Text("PreviewChat")
+                Text("PreviewAgent")
                     .font(.largeTitle).fontWeight(.semibold)
-                Text("PDF・画像・Markdown を Claude と一緒に読む")
+                Text("PDF・画像・Markdown を Claude / Codex と一緒に読む")
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
                     Button {

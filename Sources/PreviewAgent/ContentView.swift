@@ -60,7 +60,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .pcChatToggle)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) { chatVisible.toggle() }
         }
-        // Auto-reveal chat when user asks Claude about a PDF selection.
+        // Auto-reveal chat when user asks the active agent about a PDF selection.
         .onReceive(NotificationCenter.default.publisher(for: .pcAskAboutSelection)) { _ in
             if !chatVisible {
                 withAnimation(.easeInOut(duration: 0.2)) { chatVisible = true }

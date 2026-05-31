@@ -1,11 +1,12 @@
 import Foundation
 import CryptoKit
 
-/// Persists chat history and Claude session id per file.
+/// Persists chat history and agent session id per file.
 struct ChatStore {
     struct Saved: Codable {
         var messages: [Persisted]
         var sessionId: String?
+        var agentKind: String?
     }
     struct Persisted: Codable {
         var role: String        // "user" | "assistant" | "tool" | "system"
@@ -17,7 +18,7 @@ struct ChatStore {
 
     static var rootDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("PreviewChat/chats", isDirectory: true)
+        let dir = base.appendingPathComponent("PreviewAgent/chats", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

@@ -5,7 +5,7 @@ DerivedData/
 *.xcuserdatad
 
 # XcodeGen output — regenerated from project.yml
-PreviewChat.xcodeproj/
+PreviewAgent.xcodeproj/
 
 # macOS
 .DS_Store

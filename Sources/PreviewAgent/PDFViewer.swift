@@ -3,7 +3,7 @@ import PDFKit
 import AppKit
 import Combine
 
-// MARK: - PDFView subclass with "Ask Claude" menu item
+// MARK: - PDFView subclass with "Ask AI" menu item
 
 final class ContextMenuPDFView: PDFView {
     /// PDFView builds its right-click menu internally; the safest hook is
@@ -12,8 +12,8 @@ final class ContextMenuPDFView: PDFView {
         let menu = super.menu(for: event) ?? NSMenu()
         if let sel = currentSelection?.string,
            !sel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let item = NSMenuItem(title: "Claude に質問…",
-                                  action: #selector(askClaudeAboutSelection(_:)),
+            let item = NSMenuItem(title: "AI に質問…",
+                                  action: #selector(askAIAboutSelection(_:)),
                                   keyEquivalent: "")
             item.target = self
             menu.insertItem(item, at: 0)
@@ -22,7 +22,7 @@ final class ContextMenuPDFView: PDFView {
         return menu
     }
 
-    @objc func askClaudeAboutSelection(_ sender: Any?) {
+    @objc func askAIAboutSelection(_ sender: Any?) {
         guard let sel = currentSelection else { return }
         let text = sel.string ?? ""
         guard !text.isEmpty else { return }
