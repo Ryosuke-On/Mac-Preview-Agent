@@ -8,9 +8,122 @@ private let _mdPool = WKProcessPool()
 /// WKWebView subclass that forwards scrollWheel events to its superview so the
 /// enclosing SwiftUI ScrollView in ChatView can scroll even when the cursor is
 /// hovering over rendered markdown content.
+///
+/// Also implements edge auto-scroll during a text-selection drag: when the user
+/// drags a selection to the top/bottom edge of the chat's visible area, the
+/// enclosing scroll view scrolls so the selection can be extended past the fold
+/// (so copying long passages no longer stops at the visible boundary).
 final class PassthroughWebView: WKWebView {
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
+    }
+
+    // MARK: - Auto-scroll while drag-selecting
+
+    private var dragMonitor: Any?
+    /// True only for a drag that began inside this web view's content (i.e. a
+    /// text selection), so other web views / the splitter don't trigger scrolling.
+    private var draggingInSelf = false
+    private var autoScrollTimer: Timer?
+    /// Window-points to advance per tick; sign already resolved for direction.
+    private var autoScrollVelocity: CGFloat = 0
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { installDragMonitor() } else { removeDragMonitor() }
+    }
+
+    deinit { removeDragMonitor() }
+
+    private func installDragMonitor() {
+        guard dragMonitor == nil else { return }
+        dragMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        ) { [weak self] event in
+            self?.handleSelectionDrag(event)
+            return event
+        }
+    }
+
+    private func removeDragMonitor() {
+        if let m = dragMonitor { NSEvent.removeMonitor(m); dragMonitor = nil }
+        stopAutoScroll()
+    }
+
+    private func handleSelectionDrag(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            // Check whether the click location falls within this view's frame
+            // in window coordinates — more reliable than hitTest for WKWebView
+            // whose internal subviews are managed by a separate web process.
+            if let win = window {
+                let ptInSelf = convert(event.locationInWindow, from: nil)
+                draggingInSelf = bounds.contains(ptInSelf) && win === self.window
+            } else {
+                draggingInSelf = false
+            }
+        case .leftMouseDragged:
+            guard draggingInSelf else { return }
+            updateAutoScroll(for: event)
+        case .leftMouseUp:
+            draggingInSelf = false
+            stopAutoScroll()
+        default:
+            break
+        }
+    }
+
+    /// Set the scroll velocity based on how far past the top/bottom edge the
+    /// pointer is. Zero velocity (pointer inside the safe band) stops scrolling.
+    private func updateAutoScroll(for event: NSEvent) {
+        guard let scrollView = enclosingScrollView else { stopAutoScroll(); return }
+        let clip = scrollView.contentView
+        let frameInWindow = clip.convert(clip.bounds, to: nil)
+        let py = event.locationInWindow.y          // window coords, y increases upward
+        let margin: CGFloat = 28
+        let maxSpeed: CGFloat = 20                  // points per tick
+
+        var velocity: CGFloat = 0
+        if py > frameInWindow.maxY - margin {       // near top → reveal earlier content
+            velocity = -min(maxSpeed, max(2, py - (frameInWindow.maxY - margin)))
+        } else if py < frameInWindow.minY + margin { // near bottom → reveal later content
+            velocity = min(maxSpeed, max(2, (frameInWindow.minY + margin) - py))
+        }
+
+        autoScrollVelocity = velocity
+        if velocity == 0 { stopAutoScroll() } else { startAutoScroll() }
+    }
+
+    private func startAutoScroll() {
+        guard autoScrollTimer == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.stepAutoScroll()
+        }
+        // .eventTracking so the timer keeps firing during the drag's tracking loop.
+        RunLoop.current.add(t, forMode: .eventTracking)
+        RunLoop.current.add(t, forMode: .default)
+        autoScrollTimer = t
+    }
+
+    private func stopAutoScroll() {
+        autoScrollTimer?.invalidate()
+        autoScrollTimer = nil
+        autoScrollVelocity = 0
+    }
+
+    private func stepAutoScroll() {
+        guard autoScrollVelocity != 0,
+              let scrollView = enclosingScrollView,
+              let doc = scrollView.documentView else { return }
+        let clip = scrollView.contentView
+        var origin = clip.bounds.origin
+        // Flipped document (SwiftUI ScrollView): +velocity (near bottom) scrolls down.
+        let newY = doc.isFlipped ? origin.y + autoScrollVelocity
+                                 : origin.y - autoScrollVelocity
+        let maxY = max(0, doc.frame.height - clip.bounds.height)
+        origin.y = min(maxY, max(0, newY))
+        clip.scroll(to: origin)
+        scrollView.reflectScrolledClipView(clip)
     }
 }
 
@@ -86,7 +199,7 @@ struct MarkdownMessageView: NSViewRepresentable {
         *{box-sizing:border-box;margin:0;padding:0}
         html,body{background:transparent;color:\(fg);
           font-family:-apple-system,"Helvetica Neue",sans-serif;
-          font-size:13px;line-height:1.6;word-break:break-word}
+          font-size:13px;line-height:1.6;word-break:break-word;cursor:text}
         p{margin-bottom:6px}
         h1,h2,h3{font-weight:600;margin-top:10px;margin-bottom:4px}
         h1{font-size:1.4em}h2{font-size:1.2em}h3{font-size:1.05em}
@@ -327,12 +440,16 @@ func processCitations(in md: String) -> (markdown: String, citations: [ParsedCit
         if kind == "web" {
             citations.append(.web(url: key, label: payload))
             let urlAttr = htmlEscapeAttr(key)
-            result += "<a href=\"#\" class=\"pc-web\" data-url=\"\(urlAttr)\">[\(idx)]</a>"
+            // Keep the label inline so the message reads on its own, then the badge.
+            let lText = htmlEscapeText(payload)
+            result += "\(lText)<a href=\"#\" class=\"pc-web\" data-url=\"\(urlAttr)\">[\(idx)]</a>"
         } else {
             let page = Int(key) ?? 0
             citations.append(.pdf(page: page, quote: payload))
             let qAttr = htmlEscapeAttr(payload)
-            result += "<a href=\"#\" class=\"pc-cite\" data-page=\"\(page)\" data-quote=\"\(qAttr)\">[\(idx)]</a>"
+            // Keep the quoted text inline so the message reads on its own, then the badge.
+            let qText = htmlEscapeText(payload)
+            result += "\(qText)<a href=\"#\" class=\"pc-cite\" data-page=\"\(page)\" data-quote=\"\(qAttr)\">[\(idx)]</a>"
         }
         cursor = m.range.location + m.range.length
     }

@@ -772,11 +772,11 @@ struct MessageRow: View {
 // MARK: - String highlighting helpers
 
 extension String {
-    /// Strip `[[cite:N|quote]]` markers and replace each with a small superscript `[N]`.
-    /// Used in plain-text rendering (streaming + user/tool messages) so the raw markers
-    /// don't appear before the WKWebView renderer takes over.
+    /// Rewrite `[[cite:N|quote]]` markers as the inline quoted text followed by `[N]`,
+    /// so the message reads naturally on its own. Used in plain-text rendering
+    /// (streaming + user/tool messages) before the WKWebView renderer takes over.
     func strippingCitationMarkers() -> String {
-        let pattern = #"\[\[(?:cite|web):[^|\]]+?\|(?:.+?)\]\]"#
+        let pattern = #"\[\[(?:cite|web):[^|\]]+?\|(.+?)\]\]"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
             return self
         }
@@ -789,7 +789,9 @@ extension String {
             if m.range.location > cursor {
                 result += ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))
             }
-            result += " [\(i+1)]"
+            // Keep the quoted/label text inline so the message reads on its own.
+            let payload = ns.substring(with: m.range(at: 1))
+            result += "\(payload) [\(i+1)]"
             cursor = m.range.location + m.range.length
         }
         if cursor < ns.length {
