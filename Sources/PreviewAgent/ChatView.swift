@@ -50,6 +50,8 @@ struct ChatMessage: Identifiable, Equatable {
     /// Per-message token counts (assistant only, set when the turn ends).
     var inputTokens: Int? = nil
     var outputTokens: Int? = nil
+    /// PNG image data attached to a user message (clipboard paste / drag-drop).
+    var imageData: Data? = nil
 }
 
 enum ModelChoice: String, CaseIterable, Identifiable {
@@ -105,6 +107,7 @@ struct ChatView: View {
     @StateObject private var cmdFMonitor = ChatCmdFMonitor()
     @State private var messages: [ChatMessage] = []
     @State private var input: String = ""
+    @State private var pendingImage: NSImage? = nil
     @State private var streamingIndex: Int? = nil
     @AppStorage("preferredAgent") private var preferredAgentRaw: String = AgentKind.claude.rawValue
     @AppStorage("preferredClaudeModel") private var preferredClaudeModelRaw: String = ModelChoice.claudeSonnet.rawValue
@@ -208,10 +211,12 @@ struct ChatView: View {
         .onAppear {
             if let saved = ChatStore.load(for: fileURL) {
                 messages = saved.messages.map {
-                    ChatMessage(role: .init(rawValue: $0.role) ?? .system,
-                                text: $0.text, toolName: $0.toolName,
-                                inputTokens: $0.inputTokens,
-                                outputTokens: $0.outputTokens)
+                    let imgData = $0.imageDataBase64.flatMap { Data(base64Encoded: $0) }
+                    return ChatMessage(role: .init(rawValue: $0.role) ?? .system,
+                                      text: $0.text, toolName: $0.toolName,
+                                      inputTokens: $0.inputTokens,
+                                      outputTokens: $0.outputTokens,
+                                      imageData: imgData)
                 }
                 if let savedKind = saved.agentKind, let kind = AgentKind(rawValue: savedKind) {
                     preferredAgentRaw = kind.rawValue
@@ -393,29 +398,81 @@ struct ChatView: View {
     // MARK: - Input
 
     private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            ChatInputField(text: $input, onSubmit: send)
-                .frame(minHeight: 38, maxHeight: 140)
-                .padding(6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.controlBackgroundColor)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
-            if streamingIndex != nil {
-                Button(action: stopStreaming) {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 28, height: 28)
-                        .foregroundStyle(.white)
-                        .background(Circle().fill(Color.red.opacity(0.85)))
+        VStack(spacing: 6) {
+            // Thumbnail strip for the pending image (shown when an image is pasted/dropped).
+            if let img = pendingImage {
+                HStack(alignment: .top, spacing: 8) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(nsImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Button { pendingImage = nil } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.black.opacity(0.6))
+                                .font(.system(size: 14))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 6, y: -6)
+                    }
+                    Spacer()
                 }
-                .buttonStyle(.plain)
-                .help("生成を停止 (⌘.)")
-                .keyboardShortcut(".", modifiers: .command)
-            } else {
-                Button(action: send) { Image(systemName: "paperplane.fill").frame(width: 28, height: 28) }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+            }
+
+            HStack(alignment: .bottom, spacing: 8) {
+                ChatInputField(text: $input, onSubmit: send, onImagePaste: { pendingImage = $0 })
+                    .frame(minHeight: 38, maxHeight: 140)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.controlBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
+                    // Accept image files dragged onto the input field.
+                    .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
+                        handleImageDrop(providers)
+                    }
+                if streamingIndex != nil {
+                    Button(action: stopStreaming) {
+                        Image(systemName: "stop.fill")
+                            .frame(width: 28, height: 28)
+                            .foregroundStyle(.white)
+                            .background(Circle().fill(Color.red.opacity(0.85)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("生成を停止 (⌘.)")
+                    .keyboardShortcut(".", modifiers: .command)
+                } else {
+                    Button(action: send) { Image(systemName: "paperplane.fill").frame(width: 28, height: 28) }
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  && pendingImage == nil)
+                }
             }
         }
         .padding(10)
+    }
+
+    private func handleImageDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        if provider.hasItemConformingToTypeIdentifier("public.image") {
+            provider.loadDataRepresentation(forTypeIdentifier: "public.image") { data, _ in
+                guard let data, let img = NSImage(data: data) else { return }
+                DispatchQueue.main.async { pendingImage = img }
+            }
+            return true
+        }
+        if provider.hasItemConformingToTypeIdentifier("public.file-url") {
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil),
+                      let img = NSImage(contentsOf: url) else { return }
+                DispatchQueue.main.async { pendingImage = img }
+            }
+            return true
+        }
+        return false
     }
 
     // MARK: - Actions
@@ -452,13 +509,22 @@ struct ChatView: View {
 
     private func send() {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || pendingImage != nil else { return }
         input = ""
-        messages.append(ChatMessage(role: .user, text: text))
+        let imgData = pendingImage.flatMap { encodePNG($0) }
+        pendingImage = nil
+        messages.append(ChatMessage(role: .user, text: text, imageData: imgData))
         messages.append(ChatMessage(role: .assistant, text: "", isStreaming: true))
         streamingIndex = messages.count - 1
-        agent.send(userMessage: text)
+        agent.send(userMessage: text, imageData: imgData)
         persist()
+    }
+
+    /// Encode an NSImage as PNG data for sending and persistence.
+    private func encodePNG(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let bmp  = NSBitmapImageRep(data: tiff) else { return nil }
+        return bmp.representation(using: .png, properties: [:])
     }
 
     private func editMessage(id: UUID) {
@@ -475,13 +541,13 @@ struct ChatView: View {
     private func regenerate(id: UUID) {
         guard let idx = messages.firstIndex(where: { $0.id == id }),
               messages[idx].role == .assistant else { return }
-        guard let userText = messages[0..<idx].last(where: { $0.role == .user })?.text else { return }
+        guard let userMsg = messages[0..<idx].last(where: { $0.role == .user }) else { return }
         messages.removeSubrange(idx...)
         agent.resetSession()
         agent.start()
         messages.append(ChatMessage(role: .assistant, text: "", isStreaming: true))
         streamingIndex = messages.count - 1
-        agent.send(userMessage: userText)
+        agent.send(userMessage: userMsg.text, imageData: userMsg.imageData)
         persist()
     }
 
@@ -546,10 +612,10 @@ struct ChatView: View {
         ChatStore.save(.init(
             messages: messages.map {
                 .init(role: $0.role.rawValue, text: $0.text, toolName: $0.toolName,
-                      inputTokens: $0.inputTokens, outputTokens: $0.outputTokens)
+                      inputTokens: $0.inputTokens, outputTokens: $0.outputTokens,
+                      imageDataBase64: $0.imageData?.base64EncodedString())
             },
-            sessionId: agent.sessionId
-            ,
+            sessionId: agent.sessionId,
             agentKind: agent.agentKind.rawValue
         ), for: fileURL)
     }
@@ -575,15 +641,48 @@ struct ChatView: View {
 
 // MARK: - Chat input
 
+/// NSTextView subclass that intercepts paste when the clipboard contains an image,
+/// routing it to `onImagePaste` instead of inserting raw bitmap into the text field.
+final class ImageAwareTextView: NSTextView {
+    var onImagePaste: ((NSImage) -> Void)?
+
+    override func paste(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        // Prefer image data over plain text when both are present.
+        if let img = NSImage(pasteboard: pb) {
+            onImagePaste?(img)
+            return
+        }
+        super.paste(sender)
+    }
+
+    // Also accept image files dragged directly onto the text view.
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+        if let img = NSImage(pasteboard: pb) {
+            onImagePaste?(img)
+            return true
+        }
+        return super.performDragOperation(sender)
+    }
+}
+
 struct ChatInputField: NSViewRepresentable {
     @Binding var text: String
     var onSubmit: () -> Void
+    var onImagePaste: ((NSImage) -> Void)? = nil
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        guard let tv = scroll.documentView as? NSTextView else { return scroll }
+        let tv = ImageAwareTextView()
+        let coordinator = context.coordinator
+        tv.onImagePaste = { img in
+            coordinator.parent.onImagePaste?(img)
+        }
+        scroll.documentView = tv
         tv.delegate = context.coordinator
         tv.isRichText = false
         tv.font = NSFont.systemFont(ofSize: 13)
@@ -593,6 +692,9 @@ struct ChatInputField: NSViewRepresentable {
         tv.isAutomaticTextReplacementEnabled = false
         tv.drawsBackground = false
         tv.textContainerInset = NSSize(width: 2, height: 4)
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.isVerticallyResizable = true
+        tv.textContainer?.widthTracksTextView = true
         context.coordinator.textView = tv
         context.coordinator.installFocusObserver()
         return scroll
@@ -651,11 +753,23 @@ struct MessageRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 HStack {
                     Spacer(minLength: 30)
-                    Text(message.text.highlighted(query: highlight))
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.accentColor.opacity(0.15)))
+                    VStack(alignment: .trailing, spacing: 6) {
+                        // Image thumbnail (if attached).
+                        if let data = message.imageData, let img = NSImage(data: data) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 220, maxHeight: 180)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        if !message.text.isEmpty {
+                            Text(message.text.highlighted(query: highlight))
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.accentColor.opacity(0.15)))
+                        }
+                    }
                 }
                 // Action bar — always in layout, opacity drives visibility.
                 HStack(spacing: 6) {

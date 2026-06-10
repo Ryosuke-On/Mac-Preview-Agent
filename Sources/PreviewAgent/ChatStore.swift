@@ -14,6 +14,8 @@ struct ChatStore {
         var toolName: String?
         var inputTokens: Int?
         var outputTokens: Int?
+        /// Base64-encoded PNG for user messages that include an image attachment.
+        var imageDataBase64: String?
     }
 
     static var rootDir: URL {

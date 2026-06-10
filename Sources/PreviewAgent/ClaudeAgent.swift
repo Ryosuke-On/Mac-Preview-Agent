@@ -329,7 +329,7 @@ final class ClaudeAgent: ObservableObject {
         onEvent?(.assistantTurnEnd)
     }
 
-    func send(userMessage: String) {
+    func send(userMessage: String, imageData: Data? = nil) {
         if agentKind == .codex {
             sendCodex(userMessage: userMessage)
             return
@@ -337,10 +337,25 @@ final class ClaudeAgent: ObservableObject {
         if process == nil { start() }
         guard let stdin = stdinPipe?.fileHandleForWriting else { return }
 
-        // Build the content. If this is the first user message in an image session,
-        // attach the image as a base64 content block alongside the text.
+        // Build the content blocks. Priority:
+        //  1. Inline image pasted by the user (imageData parameter).
+        //  2. The opened file's image (imageURL), sent once at the start of a session.
+        //  3. Plain text only.
         let content: Any
-        if let imgURL = imageURL, !hasSentImage,
+        if let data = imageData {
+            // User pasted/dropped an image into the input bar.
+            content = [
+                [
+                    "type": "image",
+                    "source": [
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": data.base64EncodedString()
+                    ]
+                ],
+                ["type": "text", "text": userMessage.isEmpty ? "この画像について教えてください。" : userMessage]
+            ] as [Any]
+        } else if let imgURL = imageURL, !hasSentImage,
            let encoded = encodeImageForVision(imgURL) {
             content = [
                 [
