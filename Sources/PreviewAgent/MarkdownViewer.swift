@@ -71,26 +71,35 @@ struct MarkdownViewer: NSViewRepresentable {
         private var observers: [NSObjectProtocol] = []
         private weak var textView: NSTextView?
 
+        /// True only when this text view belongs to the frontmost (key) window.
+        /// Menu commands broadcast to every open window, so without this guard a single
+        /// ⌘P would print every open document at once.
+        private var isKey: Bool { textView?.window?.isKeyWindow == true }
+
         func attach(to tv: NSTextView) {
             textView = tv
             let nc = NotificationCenter.default
             let q  = OperationQueue.main
             observers = [
                 nc.addObserver(forName: .pcZoomIn,     object: nil, queue: q) { [weak self] _ in
+                    guard self?.isKey == true else { return }
                     self?.adjustSize(by: +2)
                 },
                 nc.addObserver(forName: .pcZoomOut,    object: nil, queue: q) { [weak self] _ in
+                    guard self?.isKey == true else { return }
                     self?.adjustSize(by: -2)
                 },
                 nc.addObserver(forName: .pcActualSize, object: nil, queue: q) { [weak self] _ in
+                    guard self?.isKey == true else { return }
                     self?.setSize(14)
                 },
                 nc.addObserver(forName: .pcPrint,      object: nil, queue: q) { [weak self] _ in
+                    guard self?.isKey == true else { return }
                     self?.textView?.printView(nil)
                 },
                 nc.addObserver(forName: .pcFind,       object: nil, queue: q) { [weak self] _ in
                     // Trigger NSTextView's native find bar (usesFindBar = true).
-                    guard let tv = self?.textView else { return }
+                    guard let tv = self?.textView, tv.window?.isKeyWindow == true else { return }
                     tv.window?.makeFirstResponder(tv)
                     let item = NSMenuItem()
                     item.tag = NSTextFinder.Action.showFindInterface.rawValue

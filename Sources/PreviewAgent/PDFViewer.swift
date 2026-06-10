@@ -237,39 +237,48 @@ struct PDFKitContainer: NSViewRepresentable {
         private var observers: [NSObjectProtocol] = []
         private weak var pdfView: PDFView?
 
+        /// Run `action` only when this view belongs to the frontmost (key) window.
+        /// Menu commands broadcast to every open window via NotificationCenter; without
+        /// this guard a single ⌘P would print *every* open document at once.
+        private func ifKey(_ action: (PDFView) -> Void) {
+            guard let v = pdfView, v.window?.isKeyWindow == true else { return }
+            action(v)
+        }
+
         func attach(to view: PDFView) {
             pdfView = view
             let nc = NotificationCenter.default
             let q  = OperationQueue.main
             observers = [
                 nc.addObserver(forName: .pcPrint,      object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.printView(nil)
+                    self?.ifKey { $0.printView(nil) }
                 },
                 nc.addObserver(forName: .pcZoomIn,     object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.zoomIn(nil)
+                    self?.ifKey { $0.zoomIn(nil) }
                 },
                 nc.addObserver(forName: .pcZoomOut,    object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.zoomOut(nil)
+                    self?.ifKey { $0.zoomOut(nil) }
                 },
                 nc.addObserver(forName: .pcActualSize, object: nil, queue: q) { [weak self] _ in
-                    guard let v = self?.pdfView else { return }
-                    v.autoScales = false
-                    v.scaleFactor = 1.0
+                    self?.ifKey { v in
+                        v.autoScales = false
+                        v.scaleFactor = 1.0
+                    }
                 },
                 nc.addObserver(forName: .pcZoomToFit,  object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.autoScales = true
+                    self?.ifKey { $0.autoScales = true }
                 },
                 nc.addObserver(forName: .pcFirstPage,  object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.goToFirstPage(nil)
+                    self?.ifKey { $0.goToFirstPage(nil) }
                 },
                 nc.addObserver(forName: .pcPrevPage,   object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.goToPreviousPage(nil)
+                    self?.ifKey { $0.goToPreviousPage(nil) }
                 },
                 nc.addObserver(forName: .pcNextPage,   object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.goToNextPage(nil)
+                    self?.ifKey { $0.goToNextPage(nil) }
                 },
                 nc.addObserver(forName: .pcLastPage,   object: nil, queue: q) { [weak self] _ in
-                    self?.pdfView?.goToLastPage(nil)
+                    self?.ifKey { $0.goToLastPage(nil) }
                 },
             ]
         }
